@@ -102,6 +102,19 @@ function App() {
         {/* Right Content Area - Scrollable */}
         <main className="flex-1 overflow-y-auto">
           <div className="max-w-7xl mx-auto px-3 sm:px-4 md:px-6 lg:px-8 py-4 sm:py-6 lg:py-8">
+            {/* Mobile Chat - Visible on mobile, hidden on desktop (above rows) */}
+            <div className="lg:hidden mb-4 sm:mb-6">
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.05 }}
+                className="h-[400px] sm:h-[450px]"
+                style={{ backgroundColor: '#0C090A' }}
+              >
+                <Chat city={city} />
+              </motion.div>
+            </div>
+
             {/* Row 1: Daily Summary and Quotes */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6 mb-4 sm:mb-6">
               <motion.div

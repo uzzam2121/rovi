@@ -121,10 +121,10 @@ RESPONSE GUIDELINES:
       animate={{ opacity: 1, x: 0 }}
       className="h-full flex flex-col overflow-hidden"
     >
-      <div className="flex items-center gap-2 p-6 pb-4 shrink-0 border-b border-yellow-600/30">
-        <h3 className="font-semibold text-lg text-yellow-400">Chat with Rovi</h3>
+      <div className="flex items-center gap-2 p-3 sm:p-4 md:p-6 pb-2 sm:pb-3 md:pb-4 shrink-0 border-b border-yellow-600/30">
+        <h3 className="font-semibold text-base sm:text-lg text-yellow-400">Chat with Rovi</h3>
       </div>
-      <div className="flex-1 overflow-y-auto px-6 py-4 space-y-3 min-h-0">
+      <div className="flex-1 overflow-y-auto px-3 sm:px-4 md:px-6 py-2 sm:py-3 md:py-4 space-y-3 min-h-0">
         <AnimatePresence>
           {messages.map((message) => (
             <motion.div
@@ -141,7 +141,7 @@ RESPONSE GUIDELINES:
                     : 'bg-gray-800 text-gray-200 border border-yellow-600/30'
                 }`}
               >
-                <p className="text-sm">{message.text}</p>
+                <p className="text-xs sm:text-sm">{message.text}</p>
               </div>
             </motion.div>
           ))}
@@ -163,18 +163,18 @@ RESPONSE GUIDELINES:
         )}
         <div ref={messagesEndRef} />
       </div>
-      <form onSubmit={handleSend} className="flex gap-2 shrink-0 border-t border-yellow-600/30 p-4" style={{ backgroundColor: '#0C090A' }}>
+      <form onSubmit={handleSend} className="flex gap-2 shrink-0 border-t border-yellow-600/30 p-2 sm:p-3 md:p-4" style={{ backgroundColor: '#0C090A' }}>
         <input
           type="text"
           value={input}
           onChange={(e) => setInput(e.target.value)}
           placeholder="Ask Rovi anything..."
-          className="flex-1 px-4 py-2 bg-gray-800 border border-yellow-600/30 rounded-lg text-white placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500"
+          className="flex-1 px-3 sm:px-4 py-2 bg-gray-800 border border-yellow-600/30 rounded-lg text-white text-sm sm:text-base placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500"
         />
         <button
           type="submit"
           disabled={loading || !input.trim()}
-          className="px-4 py-2 bg-yellow-500 text-gray-900 rounded-lg hover:bg-yellow-400 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2 font-semibold"
+          className="px-3 sm:px-4 py-2 bg-yellow-500 text-gray-900 rounded-lg hover:bg-yellow-400 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2 font-semibold text-sm sm:text-base shrink-0"
         >
           <Send className="w-4 h-4" />
         </button>
