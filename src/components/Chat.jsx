@@ -31,13 +31,49 @@ export default function Chat({ city }) {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const messagesEndRef = useRef(null);
+  const messagesContainerRef = useRef(null);
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  const scrollToBottom = (immediate = false) => {
+    // Use requestAnimationFrame for better performance
+    const scroll = () => {
+      if (messagesContainerRef.current) {
+        const container = messagesContainerRef.current;
+        const targetScroll = container.scrollHeight - container.clientHeight;
+        
+        if (immediate) {
+          // Immediate scroll for better mobile experience
+          container.scrollTop = targetScroll;
+        } else {
+          // Smooth scroll
+          container.scrollTo({
+            top: targetScroll,
+            behavior: 'smooth'
+          });
+        }
+      }
+      
+      // Also try scrollIntoView as fallback
+      if (messagesEndRef.current) {
+        messagesEndRef.current.scrollIntoView({ 
+          behavior: immediate ? 'auto' : 'smooth',
+          block: 'end',
+          inline: 'nearest'
+        });
+      }
+    };
+    
+    // Use requestAnimationFrame for immediate updates, setTimeout for delayed
+    if (immediate) {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(scroll);
+      });
+    } else {
+      setTimeout(scroll, 100);
+    }
   };
 
   useEffect(() => {
-    scrollToBottom();
+    scrollToBottom(false);
   }, [messages, loading]);
 
   const handleSend = async (e) => {
@@ -53,6 +89,9 @@ export default function Chat({ city }) {
     setMessages((prev) => [...prev, userMessage]);
     setInput('');
     setLoading(true);
+    
+    // Scroll to bottom immediately after user message (use immediate for responsiveness)
+    scrollToBottom(true);
 
     try {
       const data = getCurrentData();
@@ -102,6 +141,9 @@ RESPONSE GUIDELINES:
       };
 
       setMessages((prev) => [...prev, roviMessage]);
+      
+      // Scroll to bottom after receiving response
+      scrollToBottom(false);
     } catch (error) {
       const errorMessage = {
         id: Date.now() + 1,
@@ -110,8 +152,13 @@ RESPONSE GUIDELINES:
       };
       setMessages((prev) => [...prev, errorMessage]);
       console.error('Chat error:', error);
+      
+      // Scroll to bottom after error message
+      scrollToBottom(false);
     } finally {
       setLoading(false);
+      // Final scroll after loading completes
+      setTimeout(() => scrollToBottom(false), 200);
     }
   };
 
@@ -124,7 +171,14 @@ RESPONSE GUIDELINES:
       <div className="flex items-center gap-2 p-3 sm:p-4 md:p-6 pb-2 sm:pb-3 md:pb-4 shrink-0 border-b border-yellow-600/30">
         <h3 className="font-semibold text-base sm:text-lg text-yellow-400">Chat with Rovi</h3>
       </div>
-      <div className="flex-1 overflow-y-auto px-3 sm:px-4 md:px-6 py-2 sm:py-3 md:py-4 space-y-3 min-h-0">
+      <div 
+        ref={messagesContainerRef}
+        className="flex-1 overflow-y-auto px-3 sm:px-4 md:px-6 py-2 sm:py-3 md:py-4 space-y-3 min-h-0"
+        onScroll={(e) => {
+          // Prevent parent scrolling when user is scrolling chat
+          e.stopPropagation();
+        }}
+      >
         <AnimatePresence>
           {messages.map((message) => (
             <motion.div
@@ -163,11 +217,20 @@ RESPONSE GUIDELINES:
         )}
         <div ref={messagesEndRef} />
       </div>
-      <form onSubmit={handleSend} className="flex gap-2 shrink-0 border-t border-yellow-600/30 p-2 sm:p-3 md:p-4" style={{ backgroundColor: '#0C090A' }}>
+      <form 
+        onSubmit={handleSend} 
+        onTouchStart={(e) => e.stopPropagation()}
+        className="flex gap-2 shrink-0 border-t border-yellow-600/30 p-2 sm:p-3 md:p-4" 
+        style={{ backgroundColor: '#0C090A' }}
+      >
         <input
           type="text"
           value={input}
           onChange={(e) => setInput(e.target.value)}
+          onFocus={() => {
+            // Ensure chat stays visible when input is focused on mobile
+            setTimeout(() => scrollToBottom(false), 300);
+          }}
           placeholder="Ask Rovi anything..."
           className="flex-1 px-3 sm:px-4 py-2 bg-gray-800 border border-yellow-600/30 rounded-lg text-white text-sm sm:text-base placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500"
         />
