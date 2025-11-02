@@ -10,7 +10,7 @@ export default function DailySummary({ city }) {
   useEffect(() => {
     // Check if we have a cached summary for today
     const today = new Date().toDateString();
-    const cached = localStorage.getItem(`dailySummary_${today}`);
+    const cached = localStorage.getItem(`dailySummary_v4_${today}`);
     
     if (cached) {
       // Use cached summary
@@ -29,20 +29,19 @@ export default function DailySummary({ city }) {
       const meetings = generateMeetings();
       const habits = generateHabits();
       const expenses = generateExpenses();
-      const totalExpenses = expenses.reduce((sum, exp) => sum + exp.amount, 0);
       
-      // Generate generic summary without Gemini
-      const genericSummary = `You have ${meetings.length} meetings scheduled today. Keep tracking your daily habits progress. Your total expenses are $${totalExpenses} across ${expenses.length} categories. Stay focused and productive!`;
+      // Generate generic summary without Gemini (no dollar amounts)
+      const genericSummary = `You have ${meetings.length} meetings scheduled today. Keep tracking your daily habits progress. Your expenses are tracked across ${expenses.length} categories. Stay focused and productive!`;
       
-      // Cache the summary for today
+      // Cache the summary for today (using new version to force regeneration)
       const today = new Date().toDateString();
-      localStorage.setItem(`dailySummary_${today}`, genericSummary);
+      localStorage.setItem(`dailySummary_v4_${today}`, genericSummary);
       
       setSummary(genericSummary);
     } catch (err) {
       const fallback = 'You have 3 meetings scheduled today. Track your habits progress. Stay productive!';
       const today = new Date().toDateString();
-      localStorage.setItem(`dailySummary_${today}`, fallback);
+      localStorage.setItem(`dailySummary_v4_${today}`, fallback);
       setSummary(fallback);
       console.error(err);
     } finally {

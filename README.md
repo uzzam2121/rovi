@@ -32,12 +32,25 @@ npm run dev
 
 ## Deployment
 
-The app is optimized for Vercel deployment. Simply:
+The app is optimized for Vercel deployment. Follow these steps:
 
 1. Push your code to GitHub
 2. Import the project to Vercel
-3. Add `VITE_GEMINI_API_KEY` as an environment variable in Vercel (weather uses Open-Meteo - no key needed)
-4. Deploy!
+3. **Configure Environment Variable** (required for AI chat):
+   - Go to your Vercel project dashboard
+   - Navigate to **Settings** → **Environment Variables**
+   - Click **Add New**
+   - Name: `VITE_GEMINI_API_KEY`
+   - Value: Your Gemini API key (get it from [Google AI Studio](https://aistudio.google.com/app/apikey))
+   - Select **Production** (and optionally **Preview** and **Development**)
+   - Click **Save**
+4. **Redeploy** your project:
+   - Go to the **Deployments** tab
+   - Click the three dots on the latest deployment
+   - Select **Redeploy**
+   - Or trigger a new deployment by pushing a commit
+
+**Note:** Weather widget uses Open-Meteo API (free, no key needed). Only the chat feature requires the Gemini API key.
 
 ## Tech Stack
 

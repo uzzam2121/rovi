@@ -4,7 +4,12 @@ export async function askGemini(prompt) {
   if (!apiKey) {
     console.warn('Gemini API key is not set. Returning placeholder response.');
     // Return a placeholder instead of throwing error
-    return `[Gemini API key not configured] This is a placeholder response. To enable AI features, please add VITE_GEMINI_API_KEY to your .env file.`;
+    const isProduction = import.meta.env.PROD;
+    if (isProduction) {
+      return `AI features require configuration. Please add VITE_GEMINI_API_KEY as an environment variable in your deployment platform (e.g., Vercel Settings → Environment Variables).`;
+    } else {
+      return `AI features require configuration. Please add VITE_GEMINI_API_KEY to your .env file.`;
+    }
   }
 
   try {
