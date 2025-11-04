@@ -2,15 +2,43 @@ import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Send } from 'lucide-react';
 import { askGemini } from '../utils/gemini';
-import { generateMeetings, generateHabits, generateExpenses, generatePrices } from '../utils/mockData';
+import { getSessionData, setSessionData as saveSessionData, getOverrides, setOverrides as saveOverrides } from '../utils/dataStorage';
 
 export default function Chat({ city }) {
   // Get current data to include in chat context
+  const [overrides, setOverrides] = useState(() => getOverrides());
+
+  // Persist session mock data so the chat and UI stay consistent
+  const [sessionData, setSessionData] = useState(() => getSessionData());
+
+  // Initialize session data from storage on mount
+  useEffect(() => {
+    const data = getSessionData();
+    setSessionData(data);
+    const storedOverrides = getOverrides();
+    setOverrides(storedOverrides);
+  }, []); // Only run once on mount
+
   const getCurrentData = () => {
-    const meetings = generateMeetings();
-    const habits = generateHabits();
-    const expenses = generateExpenses();
-    const prices = generatePrices();
+    const meetings = sessionData.meetings;
+    // Apply overrides to habits from session data
+    const habits = sessionData.habits.map(habit => ({
+      ...habit,
+      progress: overrides.habits[habit.name] ?? habit.progress,
+    }));
+
+    // Apply overrides to expenses from session data
+    const expenses = sessionData.expenses.map(exp => ({
+      ...exp,
+      amount: overrides.expenses[exp.category] ?? exp.amount,
+    }));
+
+    // Apply overrides to prices from session data
+    const prices = sessionData.prices.map(price => ({
+      ...price,
+      cheapest: overrides.prices[price.name] ?? price.cheapest,
+    }));
+
     const totalExpenses = expenses.reduce((sum, exp) => sum + exp.amount, 0);
     
     return {
@@ -32,6 +60,59 @@ export default function Chat({ city }) {
   const [loading, setLoading] = useState(false);
   const messagesEndRef = useRef(null);
   const messagesContainerRef = useRef(null);
+
+  // Broadcast helper for other UI components to react to changes
+  const broadcast = (name, detail) => {
+    try {
+      window.dispatchEvent(new CustomEvent(name, { detail }));
+    } catch {}
+  };
+
+  // Helpers for time parsing/formatting
+  const to24Hour = (hour12, minuteStr = '00', ampm) => {
+    let h = parseInt(hour12, 10);
+    const m = minuteStr.padStart(2, '0');
+    const suffix = (ampm || '').toLowerCase();
+    if (suffix === 'pm' && h !== 12) h += 12;
+    if (suffix === 'am' && h === 12) h = 0;
+    return `${String(h).padStart(2, '0')}:${m}`;
+  };
+
+  const formatTimeHuman = (time24) => {
+    const [hStr, mStr] = time24.split(':');
+    let h = parseInt(hStr, 10);
+    const ampm = h >= 12 ? 'PM' : 'AM';
+    h = h % 12;
+    if (h === 0) h = 12;
+    return `${h}:${mStr} ${ampm}`;
+  };
+
+  // Resolve expense category names to those present in session data (handle synonyms)
+  const resolveExpenseCategory = (rawName) => {
+    if (!rawName) return rawName;
+    const input = String(rawName).trim();
+    const inputLc = input.toLowerCase();
+    const aliasMap = {
+      groceries: 'Food', // common synonym
+      dining: 'Food',
+      meals: 'Food',
+      food: 'Food',
+      transportation: 'Transport',
+      commute: 'Transport',
+      transit: 'Transport',
+    };
+    if (aliasMap[inputLc]) return aliasMap[inputLc];
+    // Try exact case-insensitive match against existing categories
+    const categories = sessionData.expenses.map(e => e.category);
+    const exact = categories.find(c => c.toLowerCase() === inputLc);
+    if (exact) return exact;
+    // Try startsWith/contains heuristic
+    const starts = categories.find(c => c.toLowerCase().startsWith(inputLc));
+    if (starts) return starts;
+    const contains = categories.find(c => c.toLowerCase().includes(inputLc));
+    if (contains) return contains;
+    return input; // fallback to original
+  };
 
   const scrollToBottom = (immediate = false) => {
     // Use requestAnimationFrame for better performance
@@ -94,43 +175,200 @@ export default function Chat({ city }) {
     scrollToBottom(true);
 
     try {
-      const data = getCurrentData();
-      const prompt = `You are Rovi, a professional AI personal assistant. The user is in ${city}. Maintain a professional, courteous tone at all times.
+      // Lightweight command parsing for temporary UI-only overrides
+      const text = input.trim();
 
-Available data (ONLY use when SPECIFICALLY asked):
+      // Regexes for commands
+      const priceMatch = text.match(/^(?:set|update)\s+price\s+of\s+(.+?)\s+to\s+\$?(\d+(?:\.\d+)?)/i);
+      const habitMatch = text.match(/^(?:set|update)\s+habit\s+(.+?)\s+to\s+(\d{1,3})%/i);
+      const expenseMatch = text.match(/^(?:set|update)\s+expense\s+(.+?)\s+to\s+\$?(\d+(?:\.\d+)?)/i);
+      const resetMatch = text.match(/^reset\s+(prices|habits|expenses|all)$/i);
+      const rescheduleMatch = text.match(/^(?:change|move|reschedule).*?(\d{1,2})(?::?(\d{2}))?\s*(am|pm)?\s+meeting\s+to\s+(\d{1,2})(?::?(\d{2}))?\s*(am|pm)?/i);
+      const timeQueryMatch = text.match(/^(?:what\s+about|do\s+i\s+have\s+.*at)\s+(\d{1,2})(?::?(\d{2}))?\s*(am|pm)\??$/i);
+
+      if (priceMatch || habitMatch || expenseMatch || resetMatch || rescheduleMatch || timeQueryMatch) {
+        setLoading(false);
+        if (rescheduleMatch) {
+          const [, fromH, fromM, fromAmpm, toH, toM, toAmpm] = rescheduleMatch;
+          const fromTime = to24Hour(fromH, fromM || '00', fromAmpm || 'am');
+          const toTime = to24Hour(toH, toM || '00', toAmpm || 'am');
+
+          // Find a meeting at fromTime and update its time
+          let updated = false;
+          setSessionData(prev => {
+            const meetings = prev.meetings.map(m => {
+              if (!updated && m.time === fromTime) {
+                updated = true;
+                return { ...m, time: toTime };
+              }
+              return m;
+            });
+            const next = { ...prev, meetings };
+            saveSessionData(next); // Save to storage
+            broadcast('rovi:sessionDataChanged', next);
+            return next;
+          });
+
+          const roviMessage = {
+            id: Date.now() + 1,
+            text: updated
+              ? `Confirmed. Moved your ${formatTimeHuman(fromTime)} meeting to ${formatTimeHuman(toTime)}.`
+              : `I couldn't find a meeting at ${formatTimeHuman(fromTime)}. Please specify the title or confirm the original time.`,
+            sender: 'rovi',
+          };
+          setMessages((prev) => [...prev, roviMessage]);
+          scrollToBottom(false);
+          return;
+        }
+
+        if (timeQueryMatch) {
+          const [, h, m, ampm] = timeQueryMatch;
+          const time24 = to24Hour(h, m || '00', ampm);
+          const atThatTime = sessionData.meetings.filter(mtg => mtg.time === time24);
+          const roviMessage = {
+            id: Date.now() + 1,
+            text: atThatTime.length
+              ? atThatTime.map(m => `You have ${m.title} scheduled at ${formatTimeHuman(m.time)} with ${m.participants.join(', ')}.`).join(' ')
+              : `There are no meetings scheduled at ${formatTimeHuman(time24)}.`,
+            sender: 'rovi',
+          };
+          setMessages((prev) => [...prev, roviMessage]);
+          scrollToBottom(false);
+          return;
+        }
+        if (priceMatch) {
+          const name = priceMatch[1].trim();
+          const value = parseFloat(priceMatch[2]);
+          setOverrides(prev => {
+            const next = { ...prev, prices: { ...prev.prices, [name]: value } };
+            saveOverrides(next); // Save to storage
+            broadcast('rovi:overridesChanged', next);
+            return next;
+          });
+          const roviMessage = {
+            id: Date.now() + 1,
+            text: `Noted. Temporarily set the price of ${name} to $${value.toFixed(2)} for this session.`,
+            sender: 'rovi',
+          };
+          setMessages((prev) => [...prev, roviMessage]);
+          scrollToBottom(false);
+          return;
+        }
+
+        if (habitMatch) {
+          const name = habitMatch[1].trim();
+          const value = Math.max(0, Math.min(100, parseInt(habitMatch[2], 10)));
+          setOverrides(prev => {
+            const next = { ...prev, habits: { ...prev.habits, [name]: value } };
+            saveOverrides(next); // Save to storage
+            broadcast('rovi:overridesChanged', next);
+            return next;
+          });
+          const roviMessage = {
+            id: Date.now() + 1,
+            text: `Understood. Updated the progress of ${name} to ${value}%.`,
+            sender: 'rovi',
+          };
+          setMessages((prev) => [...prev, roviMessage]);
+          scrollToBottom(false);
+          return;
+        }
+
+        if (expenseMatch) {
+          const rawCategory = expenseMatch[1].trim();
+          const value = parseFloat(expenseMatch[2]);
+          const resolvedCategory = resolveExpenseCategory(rawCategory);
+          setOverrides(prev => {
+            const next = { ...prev, expenses: { ...prev.expenses, [resolvedCategory]: value } };
+            saveOverrides(next); // Save to storage
+            broadcast('rovi:overridesChanged', next);
+            return next;
+          });
+          const label = resolvedCategory !== rawCategory ? `${rawCategory} → ${resolvedCategory}` : resolvedCategory;
+          const roviMessage = {
+            id: Date.now() + 1,
+            text: `Okay. Set the ${label} expense to $${value.toFixed(2)} for now.`,
+            sender: 'rovi',
+          };
+          setMessages((prev) => [...prev, roviMessage]);
+          scrollToBottom(false);
+          return;
+        }
+
+        if (resetMatch) {
+          const scope = resetMatch[1].toLowerCase();
+          setOverrides(prev => {
+            let next = prev;
+            if (scope === 'all') next = { prices: {}, habits: {}, expenses: {} };
+            else if (scope === 'prices') next = { ...prev, prices: {} };
+            else if (scope === 'habits') next = { ...prev, habits: {} };
+            else if (scope === 'expenses') next = { ...prev, expenses: {} };
+            saveOverrides(next); // Save to storage
+            broadcast('rovi:overridesChanged', next);
+            return next;
+          });
+          const roviMessage = {
+            id: Date.now() + 1,
+            text: scope === 'all' ? 'All temporary overrides cleared.' : `Cleared temporary ${scope} overrides.`,
+            sender: 'rovi',
+          };
+          setMessages((prev) => [...prev, roviMessage]);
+          scrollToBottom(false);
+          return;
+        }
+      }
+
+      const data = getCurrentData();
+      
+      // Include recent conversation history for context (last 6 messages)
+      const recentMessages = messages.slice(-6).map(m => 
+        `${m.sender === 'user' ? 'User' : 'Rovi'}: ${m.text}`
+      ).join('\n');
+      
+      const prompt = `You are Rovi, a professional and helpful AI personal assistant. The user is located in ${city}. You are friendly, knowledgeable, and capable of answering both personal data questions and general knowledge questions.
+
+AVAILABLE USER DATA (use this when the question relates to the user's personal information):
 - Meetings: ${data.meetings}
 - Habits: ${data.habits}
 - Expenses: ${data.expenses} (Total: $${data.totalExpenses})
 - Prices: ${data.prices}
 
-User said: "${input}"
+RECENT CONVERSATION HISTORY (use this to understand context and follow-up questions):
+${recentMessages}
+
+User's current message: "${input}"
 
 RESPONSE GUIDELINES:
 
-1. GREETINGS ONLY WHEN USER GREETS ("hi", "hello", "hey", etc.): 
-   - ONLY respond with a greeting if the user's message is a greeting
-   - Respond professionally: "Hello! How may I assist you today?" or "Hi! How can I help you?"
-   - Do NOT greet in any other response
+1. GENERAL APPROACH:
+   - Answer all questions naturally and helpfully, whether they're about personal data or general knowledge
+   - For questions about the user's data (meetings, habits, expenses, prices), use the available data above
+   - For general knowledge questions (cricket, sports, history, science, etc.), provide accurate, helpful answers
+   - Maintain context from previous messages - if the user asks "who manage them" after discussing cricket, answer about cricket team managers
+   - Be conversational and natural, not robotic
 
-2. ALL OTHER QUESTIONS (meetings, habits, expenses, prices, general questions):
-   - Answer directly without any greeting words (no "Good day!", "Hello!", etc.)
-   - Start immediately with the answer
-   - Example: "price of eggs" → "The best price for eggs (12) is $4.99." (NOT "Good day! The best price...")
-   - Example: "what are my meetings" → List meetings directly without greeting
+2. GREETINGS:
+   - ONLY greet if the user's message is clearly a greeting ("hi", "hello", "hey", etc.)
+   - Do NOT include greetings in other responses
 
-3. MEETING QUESTIONS SPECIFICALLY:
-   - Provide complete, professional responses with full context
-   - Include: time, title, and participants for each meeting
-   - Example: "You have Team Standup scheduled at 09:00 with John, Sarah, and Mike."
-   - Example: "You have a meeting scheduled at 14:00 - Design Review with Lisa, Tom, and Alex."
+3. DATA-RELATED QUESTIONS:
+   - When asked about meetings, habits, expenses, or prices, use the data provided above
+   - Provide complete, helpful information
+   - For habits: If asked about a habit's routine or details not in the data, provide general helpful advice about that type of habit
+   - Example: "what is my morning exercise progress" → Use the data to give the percentage
+   - Example: "tell me about my morning exercise routine" → If routine details aren't in data, provide helpful general advice about morning exercise routines while acknowledging their progress
 
-4. FORMATTING REQUIREMENTS:
+4. GENERAL KNOWLEDGE QUESTIONS:
+   - Answer these naturally and accurately
+   - Provide helpful, informative responses
+   - Examples: "how many players in cricket" → "A cricket team has 11 players on the field."
+   - Examples: "who manage them" (referring to cricket) → "Cricket teams are typically managed by a team manager or coach, along with support staff."
+
+5. FORMATTING:
    - Use complete sentences with proper grammar
-   - No bullet points with asterisks (*) or markdown formatting
-   - No vague endings ("Hope this helps", etc.)
-   - Professional language and structure
-   - Be informative but concise (50-150 words as appropriate)
-   - NO GREETINGS in non-greeting responses`;
+   - No markdown formatting (no bullet points with asterisks, no bold/italic)
+   - Be concise but informative (50-200 words as appropriate)
+   - Professional yet friendly tone`;
       
       const response = await askGemini(prompt);
 
@@ -161,6 +399,92 @@ RESPONSE GUIDELINES:
       setTimeout(() => scrollToBottom(false), 200);
     }
   };
+
+  // Allow external/manual updates to keep chat in sync
+  useEffect(() => {
+    const onSetData = (e) => {
+      const detail = e.detail || {};
+      // detail: { meetings?, habits?, expenses?, prices? }
+      setSessionData(prev => {
+        const next = {
+          meetings: detail.meetings ?? prev.meetings,
+          habits: detail.habits ?? prev.habits,
+          expenses: detail.expenses ?? prev.expenses,
+          prices: detail.prices ?? prev.prices,
+        };
+        saveSessionData(next); // Save to storage
+        return next;
+      });
+    };
+
+    const onSetOverride = (e) => {
+      const { scope, key, value } = e.detail || {};
+      if (!scope || key == null) return;
+      if (scope === 'prices') setOverrides(prev => {
+        const next = { ...prev, prices: { ...prev.prices, [key]: value } };
+        saveOverrides(next);
+        return next;
+      });
+      if (scope === 'habits') setOverrides(prev => {
+        const next = { ...prev, habits: { ...prev.habits, [key]: value } };
+        saveOverrides(next);
+        return next;
+      });
+      if (scope === 'expenses') setOverrides(prev => {
+        const next = { ...prev, expenses: { ...prev.expenses, [key]: value } };
+        saveOverrides(next);
+        return next;
+      });
+    };
+
+    const onResetOverrides = (e) => {
+      const scope = (e.detail && e.detail.scope) || 'all';
+      setOverrides(prev => {
+        let next = prev;
+        if (scope === 'all') next = { prices: {}, habits: {}, expenses: {} };
+        else if (scope === 'prices') next = { ...prev, prices: {} };
+        else if (scope === 'habits') next = { ...prev, habits: {} };
+        else if (scope === 'expenses') next = { ...prev, expenses: {} };
+        saveOverrides(next);
+        return next;
+      });
+    };
+
+    // Listen for storage changes from other tabs/windows
+    const onStorageChange = (e) => {
+      if (e.key === 'rovi_session_data' || e.key === 'rovi_overrides') {
+        if (e.key === 'rovi_session_data') {
+          const data = getSessionData();
+          setSessionData(data);
+        } else {
+          const overrides = getOverrides();
+          setOverrides(overrides);
+        }
+      }
+    };
+
+    window.addEventListener('rovi:setData', onSetData);
+    window.addEventListener('rovi:setOverride', onSetOverride);
+    window.addEventListener('rovi:resetOverrides', onResetOverrides);
+    window.addEventListener('storage', onStorageChange);
+    window.addEventListener('rovi:sessionDataChanged', (e) => {
+      const data = e.detail;
+      if (data) setSessionData(data);
+    });
+    window.addEventListener('rovi:overridesChanged', (e) => {
+      const overrides = e.detail;
+      if (overrides) setOverrides(overrides);
+    });
+    
+    return () => {
+      window.removeEventListener('rovi:setData', onSetData);
+      window.removeEventListener('rovi:setOverride', onSetOverride);
+      window.removeEventListener('rovi:resetOverrides', onResetOverrides);
+      window.removeEventListener('storage', onStorageChange);
+      window.removeEventListener('rovi:sessionDataChanged', () => {});
+      window.removeEventListener('rovi:overridesChanged', () => {});
+    };
+  }, []);
 
   return (
     <motion.div

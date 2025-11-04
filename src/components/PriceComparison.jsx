@@ -1,9 +1,36 @@
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { ShoppingCart, TrendingDown } from 'lucide-react';
-import { generatePrices } from '../utils/mockData';
+import { getSessionData, getOverrides } from '../utils/dataStorage';
 
 export default function PriceComparison() {
-  const items = generatePrices();
+  const [items, setItems] = useState(() => {
+    const data = getSessionData();
+    const overrides = getOverrides();
+    return data.prices.map(price => ({
+      ...price,
+      cheapest: overrides.prices[price.name] ?? price.cheapest,
+    }));
+  });
+
+  // Sync with storage changes
+  useEffect(() => {
+    const handleDataChange = () => {
+      const data = getSessionData();
+      const overrides = getOverrides();
+      setItems(data.prices.map(price => ({
+        ...price,
+        cheapest: overrides.prices[price.name] ?? price.cheapest,
+      })));
+    };
+
+    window.addEventListener('rovi:sessionDataChanged', handleDataChange);
+    window.addEventListener('rovi:overridesChanged', handleDataChange);
+    return () => {
+      window.removeEventListener('rovi:sessionDataChanged', handleDataChange);
+      window.removeEventListener('rovi:overridesChanged', handleDataChange);
+    };
+  }, []);
 
   return (
     <motion.div

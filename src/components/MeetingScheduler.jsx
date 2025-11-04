@@ -1,25 +1,40 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Calendar, Clock, Users, Edit2, Check, X } from 'lucide-react';
-import { generateMeetings } from '../utils/mockData';
+import { getSessionData, updateSessionData } from '../utils/dataStorage';
 
 export default function MeetingScheduler() {
-  const [meetings, setMeetings] = useState(() => generateMeetings());
+  const [meetings, setMeetings] = useState(() => getSessionData().meetings);
   const [editingId, setEditingId] = useState(null);
   const [editData, setEditData] = useState(null);
+
+  // Sync with storage changes
+  useEffect(() => {
+    const handleDataChange = (e) => {
+      const data = e.detail || getSessionData();
+      if (data.meetings) {
+        setMeetings(data.meetings);
+      }
+    };
+
+    window.addEventListener('rovi:sessionDataChanged', handleDataChange);
+    return () => {
+      window.removeEventListener('rovi:sessionDataChanged', handleDataChange);
+    };
+  }, []);
 
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      className="rounded-lg shadow-md p-6 h-full flex flex-col text-white border border-yellow-600/30"
+      className="rounded-lg shadow-md p-6 flex flex-col text-white border border-yellow-600/30"
       style={{ background: 'linear-gradient(135deg, #0f4c75 0%, #1b5e7a 100%)' }}
     >
       <div className="flex items-center gap-2 mb-4">
         <Calendar className="w-5 h-5" />
         <h3 className="font-semibold text-lg">Upcoming Meetings</h3>
       </div>
-      <div className="space-y-2 flex-1 overflow-hidden">
+      <div className="space-y-2">
         {meetings.map((meeting, index) => {
           const isEditing = editingId === meeting.id;
           const currentEditData = isEditing && editData ? editData : { ...meeting, participantsText: meeting.participants.join(', ') };
@@ -34,7 +49,10 @@ export default function MeetingScheduler() {
               ...currentEditData,
               participants: currentEditData.participantsText.split(',').map(p => p.trim()).filter(p => p)
             };
-            setMeetings(prev => prev.map(m => m.id === meeting.id ? updated : m));
+            const newMeetings = meetings.map(m => m.id === meeting.id ? updated : m);
+            setMeetings(newMeetings);
+            // Save to storage
+            updateSessionData({ meetings: newMeetings });
             setEditingId(null);
             setEditData(null);
           };

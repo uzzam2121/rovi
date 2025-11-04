@@ -1,25 +1,51 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { CheckCircle2, Circle, Edit2, Check, X } from 'lucide-react';
-import { generateHabits } from '../utils/mockData';
+import { getSessionData, updateSessionData, getOverrides, setOverrides } from '../utils/dataStorage';
 
 export default function HabitTracker() {
-  const [habits, setHabits] = useState(() => generateHabits());
+  const [habits, setHabits] = useState(() => {
+    const data = getSessionData();
+    const overrides = getOverrides();
+    return data.habits.map(habit => ({
+      ...habit,
+      progress: overrides.habits[habit.name] ?? habit.progress,
+    }));
+  });
   const [editingId, setEditingId] = useState(null);
   const [editProgress, setEditProgress] = useState(0);
+
+  // Sync with storage changes
+  useEffect(() => {
+    const handleDataChange = () => {
+      const data = getSessionData();
+      const overrides = getOverrides();
+      setHabits(data.habits.map(habit => ({
+        ...habit,
+        progress: overrides.habits[habit.name] ?? habit.progress,
+      })));
+    };
+
+    window.addEventListener('rovi:sessionDataChanged', handleDataChange);
+    window.addEventListener('rovi:overridesChanged', handleDataChange);
+    return () => {
+      window.removeEventListener('rovi:sessionDataChanged', handleDataChange);
+      window.removeEventListener('rovi:overridesChanged', handleDataChange);
+    };
+  }, []);
 
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      className="rounded-lg shadow-md p-6 h-full flex flex-col text-white border border-yellow-600/30"
+      className="rounded-lg shadow-md p-6 flex flex-col text-white border border-yellow-600/30"
       style={{ background: 'linear-gradient(135deg, #4a1a2e 0%, #6b2d4a 100%)' }}
     >
       <div className="flex items-center gap-2 mb-4">
         <CheckCircle2 className="w-5 h-5" />
         <h3 className="font-semibold text-lg">Daily Habits</h3>
       </div>
-      <div className="space-y-4 flex-1 overflow-y-auto">
+      <div className="space-y-4">
         {habits.map((habit, index) => {
           const percentage = (habit.progress / habit.target) * 100;
           const isEditing = editingId === habit.id;
@@ -30,7 +56,14 @@ export default function HabitTracker() {
           };
 
           const handleSave = () => {
-            setHabits(prev => prev.map(h => h.id === habit.id ? { ...h, progress: Math.min(editProgress, habit.target) } : h));
+            const newProgress = Math.min(editProgress, habit.target);
+            setHabits(prev => prev.map(h => h.id === habit.id ? { ...h, progress: newProgress } : h));
+            // Save override to storage
+            const overrides = getOverrides();
+            setOverrides({
+              ...overrides,
+              habits: { ...overrides.habits, [habit.name]: newProgress }
+            });
             setEditingId(null);
           };
 

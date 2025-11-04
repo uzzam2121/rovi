@@ -133,26 +133,48 @@ function App() {
               </motion.div>
             </div>
 
-            {/* Row 2: MeetingScheduler and HabitTracker (side by side) */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6 mb-4 sm:mb-6">
-              <div className="h-80 sm:h-96">
+            {/* Row 2: Upcoming Meetings */}
+            <div className="mb-4 sm:mb-6">
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.2 }}
+              >
                 <MeetingScheduler />
-              </div>
-              <div className="h-80 sm:h-96">
+              </motion.div>
+            </div>
+
+            {/* Row 3: Daily Habits */}
+            <div className="mb-4 sm:mb-6">
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.25 }}
+              >
                 <HabitTracker />
-              </div>
+              </motion.div>
             </div>
 
-            {/* Row 3: Price Comparison (full width) */}
+            {/* Row 4: Price Comparison */}
             <div className="mb-4 sm:mb-6">
-              <PriceComparison />
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.3 }}
+              >
+                <PriceComparison />
+              </motion.div>
             </div>
 
-            {/* Row 4: Expense Tracker (full width) */}
+            {/* Row 5: Expense Tracker */}
             <div className="mb-4 sm:mb-6">
-              <div className="h-80 sm:h-96">
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.35 }}
+              >
                 <ExpenseTracker />
-              </div>
+              </motion.div>
             </div>
           </div>
         </main>

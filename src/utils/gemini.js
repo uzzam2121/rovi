@@ -17,10 +17,14 @@ export async function askGemini(prompt) {
     // Prioritize gemini-1.5-flash with v1beta first, then v1
     // Fallback to other models if needed
     const models = [
-      { model: 'gemini-1.5-flash', version: 'v1beta' },
-      { model: 'gemini-1.5-flash', version: 'v1' },
+      // Prefer the newest requested model first
+      { model: 'gemini-2.5-flash', version: 'v1beta' },
+      { model: 'gemini-2.5-flash', version: 'v1' },
+      // Existing fallbacks
       { model: 'gemini-2.0-flash-exp', version: 'v1beta' },
       { model: 'gemini-2.0-flash-exp', version: 'v1' },
+      { model: 'gemini-1.5-flash', version: 'v1beta' },
+      { model: 'gemini-1.5-flash', version: 'v1' },
       { model: 'gemini-1.5-pro', version: 'v1beta' },
       { model: 'gemini-1.5-pro', version: 'v1' },
       { model: 'gemini-pro', version: 'v1beta' },
